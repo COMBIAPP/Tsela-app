@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>Tsela — Route 6 Combi</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1E2A47" />
+
+<!-- iOS home-screen behavior -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tsela" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+<style>
+  html, body { margin: 0; padding: 0; background: #EDE7DA; font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  #root { min-height: 100vh; }
+  @keyframes pingPulse {
+    0% { box-shadow: 0 0 0 0 rgba(224,151,44,0.45); }
+    100% { box-shadow: 0 0 0 22px rgba(224,151,44,0); }
+  }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+// ---- Small inline icon components (no external icon library needed) ----
+const Icon = ({ children, size = 20, color = "currentColor", ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...rest}>
+    {children}
+  </svg>
+);
+const HelpCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></Icon>;
+const XIcon = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const Send = (p) => <Icon {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></Icon>;
+const MapPin = (p) => <Icon {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></Icon>;
+
+const FAQ = [
+  { q: "How do I ping my stop?", a: "Tap the amber 'I'm here' button on the home screen. Drivers on your route see it appear on their map right away." },
+  { q: "How long does my ping last?", a: "It stays active as long as you're near the stop — no timer to remember. It only clears when a driver passes and picks you up, or if you cancel it yourself." },
+  { q: "How far is the combi?", a: "Once you've pinged, look just above the button — you'll see a live 'km away' and estimated minutes that update on their own. No need to ask." },
+  { q: "Why isn't my ping showing?", a: "Pings need location access. Check your phone's location is turned on for this app, then try again." },
+  { q: "How do drivers see this?", a: "Drivers running your route get a live marker at your stop, so they know to slow down and pick up." }
+];
+
+const INITIAL_DRIVER_PINGS = [
+  { id: 1, label: "Near Tlokweng Mall", km: 0.6, x: 55, y: 195, valid: true },
+  { id: 2, label: "Along Nelson Mandela Dr", km: 1.4, x: 165, y: 115, valid: true },
+  { id: 3, label: "Western Bypass turnoff", offMeters: 240, x: 300, y: 30, valid: false }
+];
+
+function App() {
+  const [view, setView] = useState("passenger");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
+  const [pinged, setPinged] = useState(false);
+  const [pickedUp, setPickedUp] = useState(false);
+  const [distanceKm, setDistanceKm] = useState(2.4);
+  const [driverPings, setDriverPings] = useState(INITIAL_DRIVER_PINGS.filter(p => p.valid));
+  const rejectedExample = INITIAL_DRIVER_PINGS.find(p => !p.valid);
+
+  useEffect(() => {
+    if (!pinged || pickedUp) return;
+    const timer = setInterval(() => {
+      setDistanceKm((d) => {
+        const next = d - 0.3;
+        if (next <= 0) { clearInterval(timer); setPickedUp(true); return 0; }
+        return next;
+      });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [pinged, pickedUp]);
+
+  function startPing() { setDistanceKm(2.4); setPinged(true); }
+
+  function askHelp() {
+    if (!question.trim()) return;
+    const q = question.trim();
+    setChatHistory((h) => [...h, { role: "user", text: q }]);
+    setQuestion("");
+    // Live AI answers need a connected backend to call the API securely —
+    // that's the one piece this standalone version doesn't include yet.
+    setTimeout(() => {
+      setChatHistory((h) => [...h, {
+        role: "assistant",
+        text: "Live AI answers need a backend connection, which isn't wired up in this installed version yet. Check the FAQ above for now."
+      }]);
+    }, 400);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ width: "100%", maxWidth: 400, minHeight: "100vh", background: "#F7F4EC", position: "relative", overflow: "hidden" }}>
+
+        <div style={{ background: "#1E2A47", color: "#F7F4EC", padding: "24px 20px 16px" }}>
+          <div style={{ fontSize: 12, letterSpacing: 1, opacity: 0.7, marginBottom: 10 }}>Route 6 · Tlokweng — Game City</div>
+          <div style={{ display: "flex", background: "#F7F4EC1A", borderRadius: 10, padding: 3 }}>
+            {["passenger", "driver"].map((v) => (
+              <button key={v} onClick={() => setView(v)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 13, fontWeight: 600, textTransform: "capitalize",
+                background: view === v ? "#E0972C" : "transparent", color: view === v ? "#1E2A47" : "#F7F4EC"
+              }}>{v}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ height: 240, background: "linear-gradient(135deg, #D9E0D3 0%, #C7D2BE 100%)", position: "relative" }}>
+          <svg width="100%" height="100%" viewBox="0 0 360 260">
+            <path d="M 20 220 Q 120 40 340 60" stroke="#8B9A82" strokeWidth="6" fill="none" strokeDasharray="2 14" strokeLinecap="round" />
+            <circle cx="20" cy="220" r="8" fill="#1E2A47" />
+            <circle cx="340" cy="60" r="8" fill="#1E2A47" />
+          </svg>
+          {view === "passenger" && pinged && !pickedUp && (
+            <div style={{ position: "absolute", top: 90, left: 145 }}><MapPin size={30} color="#E0972C" /></div>
+          )}
+          {view === "driver" && (
+            <>
+              {pinged && !pickedUp && (
+                <div style={{ position: "absolute", top: 90, left: 145 }}><MapPin size={26} color="#E0972C" /></div>
+              )}
+              {driverPings.map((p) => (
+                <div key={p.id} style={{ position: "absolute", top: p.y, left: p.x }}><MapPin size={24} color="#4F8377" /></div>
+              ))}
+              {rejectedExample && (
+                <div style={{ position: "absolute", top: rejectedExample.y, left: rejectedExample.x }}><XIcon size={20} color="#B0472F" /></div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ padding: 24, textAlign: view === "passenger" ? "center" : "left" }}>
+          {view === "passenger" && (
+            <>
+              {!pinged && !pickedUp && (
+                <p style={{ color: "#5B5548", fontSize: 14, marginBottom: 20, lineHeight: 1.5 }}>
+                  Waiting for a combi? Let drivers on this route know where you are.
+                </p>
+              )}
+              {pickedUp ? (
+                <div>
+                  <div style={{ width: 140, height: 140, borderRadius: "50%", background: "#4F8377", color: "#F7F4EC", fontSize: 15, fontWeight: 700, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>Picked up</div>
+                  <button onClick={() => { setPickedUp(false); setPinged(false); }} style={{ marginTop: 16, background: "none", border: "none", color: "#1E2A47", fontSize: 13, textDecoration: "underline", cursor: "pointer" }}>Back to home</button>
+                </div>
+              ) : (
+                <button onClick={() => (pinged ? setPinged(false) : startPing())} style={{
+                  width: 140, height: 140, borderRadius: "50%", background: pinged ? "#4F8377" : "#E0972C",
+                  color: pinged ? "#F7F4EC" : "#1E2A47", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                  animation: pinged ? "pingPulse 1.8s infinite" : "none"
+                }}>{pinged ? "Waiting…" : "I'm here"}</button>
+              )}
+              {pinged && !pickedUp && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#1E2A4712", borderRadius: 20, padding: "6px 14px", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1E2A47" }}>{distanceKm.toFixed(1)} km away</span>
+                    <span style={{ fontSize: 12, color: "#5B5548" }}>· ~{Math.max(1, Math.round(distanceKm * 3))} min</span>
+                  </div>
+                  <p style={{ color: "#5B5548", fontSize: 12, marginBottom: 8, lineHeight: 1.5 }}>Drivers on this route can see you. Stays on until a combi<br/>picks you up — no timer to watch.</p>
+                  <button onClick={() => setPinged(false)} style={{ background: "none", border: "none", color: "#B0472F", fontSize: 13, textDecoration: "underline", cursor: "pointer" }}>Cancel ping</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {view === "driver" && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1E2A47", marginBottom: 10 }}>Active pings on this route</div>
+              {driverPings.length === 0 && !(pinged && !pickedUp) && <p style={{ fontSize: 13, color: "#8A8371" }}>No passengers waiting right now.</p>}
+              {pinged && !pickedUp && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#E0972C22", border: "1px solid #E0972C55", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1E2A47" }}>Your stop (passenger view)</div>
+                    <div style={{ fontSize: 11, color: "#5B5548" }}>{distanceKm.toFixed(1)} km away · verified</div>
+                  </div>
+                  <button onClick={() => setPickedUp(true)} style={{ background: "#1E2A47", color: "#F7F4EC", border: "none", borderRadius: 16, padding: "6px 12px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>Mark picked up</button>
+                </div>
+              )}
+              {driverPings.map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#4F837714", borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1E2A47" }}>{p.label}</div>
+                    <div style={{ fontSize: 11, color: "#5B5548" }}>{p.km} km along route · verified</div>
+                  </div>
+                  <button onClick={() => setDriverPings((cur) => cur.filter((x) => x.id !== p.id))} style={{ background: "#1E2A47", color: "#F7F4EC", border: "none", borderRadius: 16, padding: "6px 12px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>Mark picked up</button>
+                </div>
+              ))}
+              {rejectedExample && (
+                <div style={{ marginTop: 16, borderTop: "1px dashed #D9D2C0", paddingTop: 12 }}>
+                  <p style={{ fontSize: 11, color: "#8A8371", marginBottom: 8 }}>Demo only — shows how the route check works</p>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#B0472F14", borderRadius: 12, padding: "10px 12px" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1E2A47" }}>{rejectedExample.label}</div>
+                      <div style={{ fontSize: 11, color: "#B0472F" }}>{rejectedExample.offMeters}m off the route line — not shown to drivers</div>
+                    </div>
+                    <XIcon size={18} color="#B0472F" />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <button onClick={() => setHelpOpen(true)} style={{
+          position: "fixed", bottom: 24, right: "max(24px, calc(50vw - 176px))", width: 52, height: 52, borderRadius: "50%",
+          background: "#1E2A47", color: "#F7F4EC", border: "none", display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 8px 20px rgba(30,42,71,0.35)", cursor: "pointer", zIndex: 10
+        }}><HelpCircle size={24} /></button>
+
+        {helpOpen && (
+          <div onClick={() => setHelpOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,42,71,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#F7F4EC", width: "100%", maxWidth: 400, margin: "0 auto", maxHeight: "78vh", borderRadius: "24px 24px 0 0", padding: 20, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "#1E2A47" }}>Help</div>
+                <button onClick={() => setHelpOpen(false)} style={{ background: "none", border: "none", cursor: "pointer" }}><XIcon size={22} color="#5B5548" /></button>
+              </div>
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {FAQ.map((item, i) => (
+                  <div key={i} style={{ marginBottom: 10, borderBottom: "1px solid #E4DECF", paddingBottom: 10 }}>
+                    <button onClick={() => setOpenFaq(openFaq === i ? null : i)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 14, fontWeight: 600, color: "#1E2A47" }}>{item.q}</button>
+                    {openFaq === i && <p style={{ marginTop: 6, fontSize: 13, color: "#5B5548", lineHeight: 1.5 }}>{item.a}</p>}
+                  </div>
+                ))}
+                {chatHistory.map((m, i) => (
+                  <div key={i} style={{ margin: "8px 0", padding: "8px 12px", borderRadius: 12, fontSize: 13, lineHeight: 1.5, background: m.role === "user" ? "#E0972C22" : "#4F837722", color: "#1E2A47" }}>
+                    <strong style={{ fontSize: 11, opacity: 0.6 }}>{m.role === "user" ? "You" : "Help"}</strong>
+                    <div>{m.text}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "1px solid #E4DECF" }}>
+                <input value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && askHelp()} placeholder="Ask something else..." style={{ flex: 1, border: "1px solid #E4DECF", borderRadius: 10, padding: "10px 12px", fontSize: 13, outline: "none" }} />
+                <button onClick={askHelp} style={{ background: "#1E2A47", color: "#F7F4EC", border: "none", borderRadius: 10, width: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Send size={16} /></button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
